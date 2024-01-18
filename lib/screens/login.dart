@@ -1,18 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-
 import 'package:essa_sales_tracking/screens/profile_screen.dart';
-import 'package:essa_sales_tracking/widgets/my_button.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:mobile_number/mobile_number.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 
@@ -27,6 +18,8 @@ class _LoginScreenState extends State<LoginScreen> {
   String _email = "";
   String _password = "";
   String _hintText = "";
+  String? _pass;
+  TextEditingController _passwordController = TextEditingController();
   bool _firstTimeLogin = false;
   var _formKey = GlobalKey<FormState>();
   String _mobileNumber = '';
@@ -39,56 +32,17 @@ class _LoginScreenState extends State<LoginScreen> {
   var _isFirsttime;
   Future<bool> _checkDbExistence() async{
     print("checking db existence");
-    /*try{
-      String directoryPath = (await getExternalStorageDirectory())!.path;
-      String documentsPath = directoryPath.substring(0, directoryPath.indexOf("/data"));
-      var status = await Permission.storage.status;
-      if (!status.isGranted) {
-        await Permission.storage.request();
-      }
-      if(status.isGranted){
-        Directory dir = await Directory(documentsPath + "/mytestdatabase");
-        print("dir PATH ${dir.path}");
-        if(await dir.exists()){
-          print("dir exists");
-          if(await databaseExists(documentsPath + "/mytestdatabase/testing.db")) {
-            print("database exists");
-            _database = await openDatabase("${dir.path}/testing.db");
-          }
-          else{
-            _database = await openDatabase("${dir.path}/testing.db",onCreate: (db, version) async{
-              await db.execute('CREATE TABLE Test (devicetoken INTEGER PRIMARY KEY, mobileNo TEXT)');
-              print("database created");
-            });
-            print("database : ${database}");
-          }
-          return true;
-        }
-        else{
-          print("creating dir");
-          dir = await dir.create(recursive: true);
-          print("directory created");
-          _database = await openDatabase("${dir.path}/testing.db", version: 1,onCreate: (db, version) async{
-            await db.execute('CREATE TABLE Test (devicetoken INTEGER PRIMARY KEY, mobileNo TEXT)');
-            print("database created");
-          });
-          return true;
-        }
-      }
-      else{
-        return false;
-      }
-    }
-    catch(e){
-      print("error in db existence");
-    }
-    return false;*/
+
    sharedPreference = (await SharedPreferences.getInstance());
    var token = sharedPreference.getString("deviceToken");
    if(token != null){
      print("sh token : ${token}");
      // bind data
      _hintText = sharedPreference.getString("mobileNo");
+     _pass = sharedPreference.getString("password");
+     if(_pass != null){
+       _password = _pass!;
+     }
      _email = _hintText;
      _deviceToken = token;
      return false;
@@ -109,7 +63,10 @@ class _LoginScreenState extends State<LoginScreen> {
       else{
         // not first time
         _isFirsttime = false;
-        print("deviceToken from local db : ${_deviceToken}");
+        print("deviceToken from local db : $_deviceToken");
+        _pass = sharedPreference.getString("password");
+        _passwordController.text = _pass!;
+        _passwordController.selection = TextSelection.fromPosition(TextPosition(offset: _pass!.length));
         setState(() {
 
         });
@@ -160,11 +117,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     child: TextFormField(
                       obscureText: true,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                           border: InputBorder.none,
-                          prefixIcon: Icon(Icons.password_sharp),
-                          hintText: "password"
+                          prefixIcon: const Icon(Icons.password_sharp),
+                          hintText: _pass == null ? "password" : ""
                       ),
+                      controller: _passwordController,
                       validator: (val) {
                         if (val!.length < 2) {
                           return "Invalid password address";
@@ -229,14 +187,14 @@ class _LoginScreenState extends State<LoginScreen> {
     var currentState = _formKey.currentState!;
     currentState.save();
     bool isValid = currentState.validate();
-    print("valid : ${isValid}");
+    print("valid : $isValid");
     if (isValid) {
       print("validate user");
       try {
         if(_isFirsttime){
           // firsttime login
-          String? deviceToken = Uuid().v1() + DateTime.now().toString();
-          print("token : ${deviceToken}");
+          String? deviceToken = const Uuid().v1() + DateTime.now().toString();
+          print("token : $deviceToken");
           print("sending req");
           Uri uri = Uri.http("194.163.166.163:1251", "/ords/sc_attendence/attn/login",
               {"empmobile": _email, "password": _password, "tokenid" : null});
@@ -260,6 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
             if(deviceTokenResponse.statusCode == 200){
               await sharedPreference.setString("deviceToken", deviceToken);
               await sharedPreference.setString("mobileNo", _email);
+              await sharedPreference.setString("password",_password);
               print("data successfully inserted");
               Navigator.of(context).pushReplacement(
                   MaterialPageRoute(builder: (ctx) {
@@ -273,9 +232,9 @@ class _LoginScreenState extends State<LoginScreen> {
         }
         else{
           print("not firsttime");
-          print("dev tok : ${_deviceToken}");
-          print("pass : ${_password}");
-          print("mob : ${_hintText}");
+          print("dev tok : $_deviceToken");
+          print("pass : $_password");
+          print("mob : $_hintText");
           // not firsttime login
           Uri uri = Uri.http("194.163.166.163:1251", "/ords/sc_attendence/attn/login",
               {"empmobile": _hintText, "password": _password, "tokenid" : _deviceToken});
@@ -307,6 +266,11 @@ class _LoginScreenState extends State<LoginScreen> {
     _loginListen.value = false;
     return "Login failed";
   }
-
+  @override
+  void dispose() {
+    // TODO: implement dispose
+    _passwordController.dispose();
+    super.dispose();
+  }
 
 }
